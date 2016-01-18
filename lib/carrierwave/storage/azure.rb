@@ -18,7 +18,7 @@ module CarrierWave
           %i(storage_account_name storage_access_key storage_blob_host).each do |key|
             ::Azure.config.send("#{key}=", uploader.send("azure_#{key}"))
           end
-          ::Azure::BlobService.new
+          ::Azure::Blob::BlobService.new
         end
       end
 
@@ -32,9 +32,20 @@ module CarrierWave
         end
 
         def store!(file)
-          @content = file.read
           @content_type = file.content_type
-          @connection.create_block_blob @uploader.azure_container, @path, @content, content_type: @content_type
+          file_to_send  = ::File.open(file.file, 'rb')
+          blocks        = []
+          i = 0
+
+          until file_to_send.eof?
+            i += 1
+            @content = file_to_send.read 4194304 # Send 4MB chunk
+            @connection.create_blob_block @uploader.azure_container, @path, i.to_s, content
+            blocks << i.to_s
+          end
+
+          @connection.commit_blob_blocks @uploader.azure_container, @path, blocks
+
           true
         end
 
@@ -60,7 +71,7 @@ module CarrierWave
           @content_type = new_content_type
         end
 
-        def exitst?
+        def exist?
           blob.nil?
         end
 
